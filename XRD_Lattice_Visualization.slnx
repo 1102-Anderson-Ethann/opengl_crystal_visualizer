@@ -1,0 +1,8 @@
+<Solution>
+  <Configurations>
+    <Platform Name="ARM64" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="XRD_Lattice_Visualization.vcxproj" Id="2d15f1aa-2905-4e24-8d8b-38c4f50ad144" />
+</Solution>
