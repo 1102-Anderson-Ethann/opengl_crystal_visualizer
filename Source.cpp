@@ -5,6 +5,7 @@
 #include <stack>
 #include <fstream>
 #include <string>
+#include <set>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -13,6 +14,9 @@
 #include "CIFParser.h"
 #include "AtomData.h"
 #include "tinyfiledialogs.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 using namespace std;
 
@@ -62,6 +66,10 @@ void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 void setupAtoms(const CIFData& cifData);
 void setupWireframe(const CIFData& cifData);
 
+
+/*
+-----------------INIT---------------------------
+*/
 void init(GLFWwindow* window) {
 	cifData = CIFParser::parse("iron.cif");
 
@@ -81,13 +89,23 @@ void init(GLFWwindow* window) {
 		1000.0f
 	);
 
-
 	setupAtoms(cifData);
 	setupWireframe(cifData);
-	
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	ImGui_ImplOpenGL3_Init("#version 460");
+	ImGuiIO& io = ImGui::GetIO();
+	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 50.0f);
+
 
 }
 
+
+/*
+-----------------DISPLAY---------------------------
+*/
 void display(GLFWwindow* window, double currentTime) {
 	glClear(GL_DEPTH_BUFFER_BIT);
 	glClearColor(0.0, 0.0, 0.0, 1.0);
@@ -95,6 +113,38 @@ void display(GLFWwindow* window, double currentTime) {
 	glEnable(GL_DEPTH_TEST);
 	glUseProgram(renderingProgram);
 
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	std::set<std::string> seenElements;
+	for (auto& atom : cifData.atoms) {
+		std::string element = AtomData::extractElement(atom.label);
+		seenElements.insert(element);
+	}
+	
+	if (!showReciprocal) {
+		for (string e : seenElements) {
+			ImGui::SetNextWindowSize(ImVec2(150, 0));
+			int w, h;
+			glfwGetFramebufferSize(glfwGetCurrentContext(), &w, &h);
+			ImGui::SetNextWindowPos(ImVec2(w - 150, 20), ImGuiCond_Always);
+			ImGui::Begin("Key", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoBringToFrontOnFocus);
+
+			glm::vec3 c = AtomData::getColor(e);
+			ImVec4 color = ImVec4(c.x, c.y, c.z, 1.0f);
+			ImDrawList* drawList = ImGui::GetWindowDrawList();
+			ImVec2 pos = ImGui::GetCursorScreenPos();
+			drawList->AddCircleFilled(ImVec2(pos.x + 8, pos.y + 16), 10.0f, ImGui::ColorConvertFloat4ToU32(color));
+			ImGui::Dummy(ImVec2(20, 16)); // reserves space so layout doesn't collapse
+			ImGui::SameLine();
+			ImGui::Text(e.c_str());
+
+			ImGui::End();
+
+		}
+	}
+		
 
 	// Uniform locations
 	mvLoc = glGetUniformLocation(renderingProgram, "mv_matrix");
@@ -158,7 +208,14 @@ void display(GLFWwindow* window, double currentTime) {
 			glDrawArrays(GL_LINES, 0, 24);
 		}
 	}
+
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
+
+/*
+-----------------CALLBACKS---------------------------
+*/
 
 void window_reshape_callback(GLFWwindow* window, int newWidth, int newHeight) {
 	aspect = (float)newWidth / (float)newHeight; // new width&height provided by the callback
@@ -205,6 +262,10 @@ void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
 	if (camRadius < 1.0f) camRadius = 1.0f; // don't go inside the model
 }
 
+
+/*
+-----------------MAIN---------------------------
+*/
 int main() {
 	if (!glfwInit()) { exit(EXIT_FAILURE); }
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -235,7 +296,9 @@ int main() {
 }
 
 
-//Implementations-----------------------------
+/*
+-----------------IMPLEMENTATIONS---------------------------
+*/
 
 void setupVertices(void){
 	
