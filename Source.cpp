@@ -249,6 +249,10 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 			glDeleteVertexArrays(1, &wireframeVAO);
 			glDeleteBuffers(1, &wireframeVBO);
 
+			camAzimuth = 0.0f;
+			camElevation = 0.3f;
+			camRadius = 25.0f;
+
 			cifData = CIFParser::parse(result);
 			setupAtoms(cifData);
 			setupWireframe(cifData);

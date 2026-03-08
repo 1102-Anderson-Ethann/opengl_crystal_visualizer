@@ -1,3 +1,4 @@
-﻿  Source.cpp
-C:\Users\silkw\Desktop\XRD Render Project\XRD_Lattice_Visualization\Source.cpp(131,37): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data
+﻿  CIFParser.cpp
+C:\Users\silkw\Desktop\XRD Render Project\XRD_Lattice_Visualization\CIFParser.cpp(134,20): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
+C:\Users\silkw\Desktop\XRD Render Project\XRD_Lattice_Visualization\CIFParser.cpp(138,22): warning C4244: '=': conversion from 'int' to 'float', possible loss of data
   XRD_Lattice_Visualization.vcxproj -> C:\Users\silkw\Desktop\XRD Render Project\XRD_Lattice_Visualization\x64\Debug\XRD_Lattice_Visualization.exe

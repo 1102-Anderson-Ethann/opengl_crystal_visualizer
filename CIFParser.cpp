@@ -14,6 +14,12 @@ CIFData CIFParser::parse(const std::string& filename) {
 		return data;
 	 }
 
+	int labelCol = -1;
+	int xCol = -1;
+	int yCol = -1;
+	int zCol = -1;
+	int colIndex = 0;
+
 	std::string line;
 	while (std::getline(file, line)) {
 		std::istringstream iss(line);
@@ -24,6 +30,7 @@ CIFData CIFParser::parse(const std::string& filename) {
 			inSymOpBlock = false;
 			inAtomSiteBlock = false;
 			atomHeaderCount = 0;
+			colIndex = 0;
 		}
 
 		if (token == "_cell_length_a")  iss >> data.lattice.a;
@@ -44,22 +51,44 @@ CIFData CIFParser::parse(const std::string& filename) {
 			data.symOps.push_back(parseSymOp(token));
 		}
 
-		if (token == "_atom_site_label") { inAtomSiteBlock = true; atomHeaderCount = 1; }
-		if (token == "_atom_site_fract_x") atomHeaderCount++;
-		if (token == "_atom_site_fract_y") atomHeaderCount++;
-		if (token == "_atom_site_fract_z") atomHeaderCount++;
-		if (token == "loop_" && inAtomSiteBlock && atomHeaderCount == 4) {
-			inAtomSiteBlock = false;
+		if (token == "_atom_site_label") {
+			inAtomSiteBlock = true;
+			labelCol = colIndex;
+			colIndex++;
+			std::cout << "Found atom site block, labelCol = " << labelCol << std::endl;
 		}
+		else if (token == "_atom_site_fract_x") { xCol = colIndex; colIndex++; }
+		else if (token == "_atom_site_fract_y") { yCol = colIndex; colIndex++; }
+		else if (token == "_atom_site_fract_z") { zCol = colIndex; colIndex++; }
+		else if (token == "loop_" && inAtomSiteBlock) { inAtomSiteBlock = false; }
+		else if (token.find("_atom_site_") == 0) { colIndex++; }
 
-
-		if (inAtomSiteBlock && atomHeaderCount == 4 &&
+		if (inAtomSiteBlock && xCol != -1 &&
 			!token.empty() && token[0] != '_' && token != "loop_") {
-			AtomSite atom;
-			atom.label = token;
-			iss >> atom.fractionalPos.x >> atom.fractionalPos.y >> atom.fractionalPos.z;
-			data.atoms.push_back(atom);
+
+			// Read all tokens on this line into a vector
+			std::vector<std::string> tokens;
+			tokens.push_back(token); // first token already consumed
+			std::string t;
+			while (iss >> t) {
+				tokens.push_back(t);
+			}
+
+			// Make sure we have enough columns
+			if ((int)tokens.size() > zCol) {
+				AtomSite atom;
+				atom.label = tokens[labelCol];
+				atom.fractionalPos.x = std::stof(tokens[xCol]);
+				atom.fractionalPos.y = std::stof(tokens[yCol]);
+				atom.fractionalPos.z = std::stof(tokens[zCol]);
+				std::cout << atom.label << " " << atom.fractionalPos.x << " " << atom.fractionalPos.y << " " << atom.fractionalPos.z << std::endl;
+				data.atoms.push_back(atom);
+			}
+
+
 		}
+
+
 	}
 	applySymmetry(data);
 	return data;
