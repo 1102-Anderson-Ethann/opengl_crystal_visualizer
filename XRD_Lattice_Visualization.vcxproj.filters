@@ -112,5 +112,6 @@
     <None Include="wireframe.frag">
       <Filter>Source Files</Filter>
     </None>
+    <None Include=".gitignore" />
   </ItemGroup>
 </Project>
