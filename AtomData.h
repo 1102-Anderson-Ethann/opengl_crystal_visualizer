@@ -42,6 +42,8 @@ public:
         return glm::vec3(0.8f, 0.8f, 0.8f); // default gray
     }
 
+
+
     static std::string extractElement(const std::string& label) {
         if (label.empty()) return label;
 

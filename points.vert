@@ -10,5 +10,5 @@ out float vIntensity;
 void main() {
     gl_Position = proj_matrix * mv_matrix * vec4(aPos, 1.0);
     vIntensity = aIntensity;
-    gl_PointSize = 4.0 + vIntensity * 8.0;
+    gl_PointSize = 8.0 + vIntensity * 16.0;
 }

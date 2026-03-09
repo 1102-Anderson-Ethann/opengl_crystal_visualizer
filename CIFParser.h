@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include<glm/glm.hpp>
+#include <glm/ext/scalar_constants.hpp>
 
 struct LatticeParameters
 {
@@ -25,6 +26,7 @@ struct CIFData
 	LatticeParameters lattice;
 	std::vector<AtomSite> atoms;
 	std::vector<SymOp> symOps;
+	std::string formula;
 };
 
 class CIFParser
@@ -33,6 +35,7 @@ public:
 	static CIFData parse(const std::string& filename);
 	static SymOp parseSymOp(const std::string& opString);
 	static void applySymmetry(CIFData& data);
+	
 private:
 
 };

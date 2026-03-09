@@ -52,6 +52,8 @@ bool showWireframe = true;
 
 CIFData cifData;
 
+vector<XRDPoint> xrdPoints;
+
 struct AtomInstance {
 	glm::vec3 center;
 	float radius;
@@ -65,6 +67,7 @@ void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 void setupAtoms(const CIFData& cifData);
 void setupWireframe(const CIFData& cifData);
+glm::vec2 worldToScreen(const glm::vec3& worldPos, const glm::mat4& mv, const glm::mat4& proj, int screenW, int screenH);
 
 
 /*
@@ -163,6 +166,27 @@ void display(GLFWwindow* window, double currentTime) {
 
 	mvStack.push(vMat);
 
+	//mouse hover
+	double mouseX, mouseY;
+	glfwGetCursorPos(window, &mouseX, &mouseY);
+
+	int screenW, screenH;
+	glfwGetFramebufferSize(window, &screenW, &screenH);
+
+	float closestDist = 30.0f; // pixel threshold
+	const XRDPoint* hoveredPoint = nullptr;
+
+	for (auto& p : xrdPoints) {
+		glm::vec2 screen = worldToScreen(p.position, vMat, pMat, screenW, screenH);
+		float dx = screen.x - (float)mouseX;
+		float dy = screen.y - (float)mouseY;
+		float dist = sqrt(dx * dx + dy * dy);
+		if (dist < closestDist) {
+			closestDist = dist;
+			hoveredPoint = &p;
+		}
+	}
+
 	// ---- XRD POINTS ----
 	if (showReciprocal) {
 		mvStack.push(mvStack.top());
@@ -173,10 +197,26 @@ void display(GLFWwindow* window, double currentTime) {
 
 		glBindVertexArray(xrdVAO);
 		glEnable(GL_PROGRAM_POINT_SIZE);
+		glEnable(GL_BLEND);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 		glDrawArrays(GL_POINTS, 0, xrdPointCount);
+		glDisable(GL_BLEND);
 
 		mvStack.pop(); // pop XRD model
 		mvStack.pop(); // pop view
+
+		if (hoveredPoint != nullptr) {
+			float Q = glm::length(hoveredPoint->position);
+			float d = (2.0f * glm::pi<float>()) / Q;
+			ImGui::SetNextWindowPos(ImVec2((float)mouseX + 15, (float)mouseY + 15));
+			ImGui::Begin("hkl", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoInputs);
+			ImGui::Text("(%d %d %d)", hoveredPoint->h, hoveredPoint->k, hoveredPoint->l);
+			ImGui::Text("d = %.3f A", d);
+			ImGui::Text("I = %.3f", hoveredPoint->intensity);
+			ImGui::End();
+		}
+
+		
 	}
 	else {
 		//atom draw
@@ -208,6 +248,31 @@ void display(GLFWwindow* window, double currentTime) {
 			glDrawArrays(GL_LINES, 0, 24);
 		}
 	}
+
+
+	int w, h;
+	glfwGetFramebufferSize(window, &w, &h);
+	float panelWidth = w * 0.35f; // 35% of window width
+
+	ImGui::SetNextWindowPos(ImVec2(10, 10), ImGuiCond_Always);
+	ImGui::SetNextWindowSize(ImVec2(panelWidth, 0), ImGuiCond_Always);
+	ImGui::Begin("Crystal Info", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar);
+
+	if (!cifData.formula.empty())
+		ImGui::Text("Formula: %s", cifData.formula.c_str());
+
+	ImGui::Separator();
+	ImGui::Text("a=%.3f  b=%.3f  c=%.3f", cifData.lattice.a, cifData.lattice.b, cifData.lattice.c);
+	ImGui::Text("α=%.1f  β=%.1f  γ=%.1f", cifData.lattice.alpha, cifData.lattice.beta, cifData.lattice.gamma);
+	ImGui::Separator();
+	ImGui::Text("Reflections: %d", xrdPointCount);
+	ImGui::Separator();
+	ImGui::Text("[Space] toggle view");
+	ImGui::Text("[O] open CIF");
+	ImGui::Text("[W] wireframe");
+	ImGui::Text("[Scroll] zoom");
+
+	ImGui::End();
 
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -274,7 +339,7 @@ int main() {
 	if (!glfwInit()) { exit(EXIT_FAILURE); }
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
-	GLFWwindow* window = glfwCreateWindow(600, 600, "Window", NULL, NULL);
+	GLFWwindow* window = glfwCreateWindow(600, 600, "XRD Lattice Visualizer", NULL, NULL);
 	glfwMakeContextCurrent(window);
 	if (glewInit() != GLEW_OK) { exit(EXIT_FAILURE); }
 	glfwSwapInterval(1);
@@ -307,7 +372,7 @@ int main() {
 void setupVertices(void){
 	
 	//---------XRD POINTS----------------
-	std::vector<XRDPoint> xrdPoints = XRDPoints::genFakeXRD(cifData.lattice.a);
+	xrdPoints = XRDPoints::genXRD(cifData);
 	xrdPointCount = static_cast<int>(xrdPoints.size());
 
 	glGenVertexArrays(1, &xrdVAO);
@@ -530,4 +595,14 @@ void setupWireframe(const CIFData& cifData) {
 
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
 	glEnableVertexAttribArray(0);
+}
+
+glm::vec2 worldToScreen(const glm::vec3& worldPos, const glm::mat4& mv, const glm::mat4& proj, int screenW, int screenH) {
+	glm::vec4 clip = proj * mv * glm::vec4(worldPos, 1.0f);
+	// perspective divide -> NDC space (-1 to 1)
+	glm::vec3 ndc = glm::vec3(clip) / clip.w;
+	// NDC to pixel coordinates
+	float x = (ndc.x + 1.0f) * 0.5f * screenW;
+	float y = (1.0f - ndc.y) * 0.5f * screenH; // y flipped
+	return glm::vec2(x, y);
 }

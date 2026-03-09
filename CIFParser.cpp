@@ -3,6 +3,7 @@
 #include <sstream>
 #include <iostream>
 
+
 CIFData CIFParser::parse(const std::string& filename) {
 	CIFData data;
 	bool inSymOpBlock = false;
@@ -44,6 +45,15 @@ CIFData CIFParser::parse(const std::string& filename) {
 			token == "_symmetry_equiv_pos_as_xyz") {
 			inSymOpBlock = true;
 		}
+		if (token == "_chemical_formula_sum") {
+			std::string formula;
+			std::getline(iss, formula);
+			// trim leading whitespace
+			formula.erase(0, formula.find_first_not_of(" \t'\""));
+			formula.erase(formula.find_last_not_of(" \t'\"") + 1);
+			data.formula = formula;
+		}
+
 
 		if (inSymOpBlock && !token.empty() &&
 			token[0] != '_' && token != "loop_" &&
@@ -214,3 +224,4 @@ void CIFParser::applySymmetry(CIFData& data) {
 
 
 }
+
