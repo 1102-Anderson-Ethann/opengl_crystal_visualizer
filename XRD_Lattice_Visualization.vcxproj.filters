@@ -97,9 +97,6 @@
     <None Include="points.frag">
       <Filter>Source Files</Filter>
     </None>
-    <None Include="iron.cif">
-      <Filter>Source Files</Filter>
-    </None>
     <None Include="atoms.vert">
       <Filter>Source Files</Filter>
     </None>

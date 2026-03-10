@@ -9,6 +9,7 @@
 
 
 float XRDPoints::scatteringFactor(const std::string& element, float Q) {
+	//build map once; shows Cromer-Mann coeffs. (a1,b1,a2,b2,a3,b3,a4,b4,c)
 	static const std::unordered_map<std::string, std::array<float, 9>> cm = {
 		{"O",  {3.048f,13.277f, 2.287f,5.701f, 1.546f,0.324f, 0.867f,322.913f, 0.251f}},
 		{"Mg", {5.420f,2.827f,  2.174f,79.261f,1.226f,0.381f, 2.307f,7.194f,   0.858f}},
@@ -23,7 +24,7 @@ float XRDPoints::scatteringFactor(const std::string& element, float Q) {
 	float s2 = s * s;
 
 	auto it = cm.find(element);
-	if (it == cm.end()) return 6.0f;
+	if (it == cm.end()) return 6.0f; //6 if not found
 
 	const auto& c = it->second;
 	return c[0] * exp(-c[1] * s2) + c[2] * exp(-c[3] * s2) +
@@ -35,30 +36,35 @@ float XRDPoints::scatteringFactor(const std::string& element, float Q) {
 std::vector<XRDPoint> XRDPoints::genXRD(const CIFData& cifData) {
 	std::vector<XRDPoint> points;
 
+	//get lattice parameters from cif and convert to real space vec
 	glm::vec3 A, B, C;
 	getLatticeVectors(cifData.lattice, A, B, C);
 
+	//take thos real space vectors and covert to reciprocal
 	glm::vec3 Astar, Bstar, Cstar;
 	getReciprocalVectors(A, B, C, Astar, Bstar, Cstar);
 
 	
-
+	//-4 to 4 range to control point range
 	for (int h = -4; h <= 4; h++) {
 		for (int k = -4; k <= 4; k++) {
 			for (int l = -4; l <= 4; l++) {
 				if (h == 0 && k == 0 && l == 0) {
-					continue;
+					continue; //skip origin (0,0,0)
 				}
 
+				//place points in reciprical space
 				XRDPoint p;
 				p.h = h; p.k = k; p.l = l;
 				p.position = (float)h * Astar + (float)k * Bstar + (float)l * Cstar;
-				float Q = glm::length(p.position);
-				float real = 0.0f, imag = 0.0f;
-				for (auto& atom : cifData.atoms) {
-					std::string element = AtomData::extractElement(atom.label);
-					float f = scatteringFactor(element, Q);
+				float Q = glm::length(p.position); //dist from origin
 
+				float real = 0.0f, imag = 0.0f;
+				for (auto& atom : cifData.atoms) { //get eleement name
+					std::string element = AtomData::extractElement(atom.label);
+					float f = scatteringFactor(element, Q); //how stron is the scatter at this Q
+
+					//2pi(hx+ky+lz)
 					float phase = 2.0f * glm::pi<float>() * (
 						h * atom.fractionalPos.x +
 						k * atom.fractionalPos.y +
@@ -67,6 +73,7 @@ std::vector<XRDPoint> XRDPoints::genXRD(const CIFData& cifData) {
 					real += f * cos(phase);
 					imag += f * sin(phase);
 				}
+				//squared mag. of the total wave
 				float Fsq = real * real + imag * imag;
 				p.intensity = sqrt(Fsq);
 
@@ -100,10 +107,6 @@ std::vector<XRDPoint> XRDPoints::genXRD(const CIFData& cifData) {
 	}
 
 	return points;
-}
-
-int XRDPoints::getXRDPointCount() {
-	return xrdPointCount;
 }
 
 void XRDPoints::getLatticeVectors(const LatticeParameters& lat,

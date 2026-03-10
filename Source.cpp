@@ -22,23 +22,30 @@ using namespace std;
 
 #define numVAOs 1
 
-float camAzimuth = 0.0f;
+//Camera pos. in spherical coords
+float camAzimuth = 0.0f; //yaw
 float camElevation = 0.3f;
 float camRadius = 25.0f;
+
+//mouse controll
 bool isDragging = false;
 double lastMouseX = 0.0, lastMouseY = 0.0;
 
+//XRD VBO and VAO
 GLuint renderingProgram;
 GLuint xrdVAO, xrdVBO;
 int xrdPointCount;
 
+//Atom view VBO and VAO
 GLuint atomProgram;
 GLuint atomVAO, atomVBO, atomInstanceVBO;
 int atomPointCount;
 int atomCount;
 
+//Wirefram VBO and VAO
 GLuint wireframeProgram;
 GLuint wireframeVAO, wireframeVBO;
+
 
 GLuint vLoc, projLoc, tfLoc, mvLoc;
 int width, height;
@@ -61,48 +68,50 @@ struct AtomInstance {
 	float padding;
 };
 
+/*
+-----------Declarations-----------
+*/
 void setupVertices(void);
 GLuint createShaderProgram(const char* vertFile, const char* fragFile);
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
-void cursor_position_callback(GLFWwindow* window, double xpos, double ypos);
 void setupAtoms(const CIFData& cifData);
 void setupWireframe(const CIFData& cifData);
 glm::vec2 worldToScreen(const glm::vec3& worldPos, const glm::mat4& mv, const glm::mat4& proj, int screenW, int screenH);
-
+void newCIFLoader();
 
 /*
 -----------------INIT---------------------------
 */
 void init(GLFWwindow* window) {
-	cifData = CIFParser::parse("iron.cif");
 
+	//get cif file 
+	newCIFLoader();
+
+	//compile shader programs
 	renderingProgram = createShaderProgram("points.vert", "points.frag");
 	atomProgram = createShaderProgram("atoms.vert", "atoms.frag");
 	wireframeProgram = createShaderProgram("wireframe.vert", "wireframe.frag");
 
 	setupVertices();
-
+	setupAtoms(cifData);
+	setupWireframe(cifData);
+	
+	//window size, aspect ratio, and proj. matrix
 	glfwGetFramebufferSize(window, &width, &height);
 	aspect = (float)width / (float)height;
-
 	pMat = glm::perspective(
 		glm::radians(60.0f),
 		aspect,
 		0.1f,
 		1000.0f
 	);
-
-	setupAtoms(cifData);
-	setupWireframe(cifData);
-
+	
+	//ImGui initialization
 	IMGUI_CHECKVERSION();
 	ImGui::CreateContext();
 	ImGui_ImplGlfw_InitForOpenGL(window, true);
 	ImGui_ImplOpenGL3_Init("#version 460");
 	ImGuiIO& io = ImGui::GetIO();
-	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 50.0f);
-
-
+	io.Fonts->AddFontFromFileTTF("C:\\Windows\\Fonts\\arial.ttf", 50.0f); //custom font with size 50
 }
 
 
@@ -110,23 +119,28 @@ void init(GLFWwindow* window) {
 -----------------DISPLAY---------------------------
 */
 void display(GLFWwindow* window, double currentTime) {
+	//clear buffers and use depth test
 	glClear(GL_DEPTH_BUFFER_BIT);
 	glClearColor(0.0, 0.0, 0.0, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glEnable(GL_DEPTH_TEST);
 	glUseProgram(renderingProgram);
 
+	//ImGui draw call initailize
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 
+	//builds element list Mg, O
 	std::set<std::string> seenElements;
 	for (auto& atom : cifData.atoms) {
 		std::string element = AtomData::extractElement(atom.label);
 		seenElements.insert(element);
 	}
 	
+	//atom screen
 	if (!showReciprocal) {
+		//draw legend using ImGui
 		for (string e : seenElements) {
 			ImGui::SetNextWindowSize(ImVec2(150, 0));
 			int w, h;
@@ -152,7 +166,6 @@ void display(GLFWwindow* window, double currentTime) {
 	// Uniform locations
 	mvLoc = glGetUniformLocation(renderingProgram, "mv_matrix");
 	projLoc = glGetUniformLocation(renderingProgram, "proj_matrix");
-
 	glUniformMatrix4fv(projLoc, 1, GL_FALSE, glm::value_ptr(pMat));
 
 	// ---- VIEW MATRIX ----
@@ -164,6 +177,7 @@ void display(GLFWwindow* window, double currentTime) {
 
 	vMat = glm::lookAt(eye, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
+	//push vMat as the base transform
 	mvStack.push(vMat);
 
 	//mouse hover
@@ -187,7 +201,7 @@ void display(GLFWwindow* window, double currentTime) {
 		}
 	}
 
-	// ---- XRD POINTS ----
+	// ---- Reciprocal view ----
 	if (showReciprocal) {
 		mvStack.push(mvStack.top());
 		mvStack.top() *= glm::mat4(1.0f); // identity model
@@ -204,7 +218,8 @@ void display(GLFWwindow* window, double currentTime) {
 
 		mvStack.pop(); // pop XRD model
 		mvStack.pop(); // pop view
-
+		
+		//when hovering a point show hkl, d spacing, and intensity
 		if (hoveredPoint != nullptr) {
 			float Q = glm::length(hoveredPoint->position);
 			float d = (2.0f * glm::pi<float>()) / Q;
@@ -219,16 +234,12 @@ void display(GLFWwindow* window, double currentTime) {
 		
 	}
 	else {
-		//atom draw
+		//real space atom view
 		glUseProgram(atomProgram);
-
 		GLuint atomMvLoc = glGetUniformLocation(atomProgram, "mv_matrix");
 		GLuint atomProjLoc = glGetUniformLocation(atomProgram, "proj_matrix");
-		
 		glUniformMatrix4fv(atomMvLoc, 1, GL_FALSE, glm::value_ptr(vMat));
 		glUniformMatrix4fv(atomProjLoc, 1, GL_FALSE, glm::value_ptr(pMat));
-		
-
 		glBindVertexArray(atomVAO);
 		glDrawArraysInstanced(GL_TRIANGLES, 0, 6, atomCount);
 
@@ -249,7 +260,7 @@ void display(GLFWwindow* window, double currentTime) {
 		}
 	}
 
-
+	//draw info panel
 	int w, h;
 	glfwGetFramebufferSize(window, &w, &h);
 	float panelWidth = w * 0.35f; // 35% of window width
@@ -296,39 +307,39 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 		showWireframe = !showWireframe;
 	}
 	if (key == GLFW_KEY_O && action == GLFW_PRESS) {
-		const char* filterPatterns[] = { "*.cif" };
-		const char* result = tinyfd_openFileDialog(
-			"Open CIF File",
-			"",
-			1,
-			filterPatterns,
-			"CIF Files",
-			0
-		);
-		if (result != nullptr) {
-			glDeleteVertexArrays(1, &atomVAO);
-			glDeleteBuffers(1, &atomVBO);
-			glDeleteBuffers(1, &atomInstanceVBO);
-			glDeleteVertexArrays(1, &xrdVAO);
-			glDeleteBuffers(1, &xrdVBO);
-			glDeleteVertexArrays(1, &wireframeVAO);
-			glDeleteBuffers(1, &wireframeVBO);
-
-			camAzimuth = 0.0f;
-			camElevation = 0.3f;
-			camRadius = 25.0f;
-
-			cifData = CIFParser::parse(result);
-			setupAtoms(cifData);
-			setupWireframe(cifData);
-			setupVertices();
-		}
+		newCIFLoader();
 	}
 }
 
 void scroll_callback(GLFWwindow* window, double xoffset, double yoffset) {
 	camRadius -= (float)yoffset * 1.0f;
 	if (camRadius < 1.0f) camRadius = 1.0f; // don't go inside the model
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+		isDragging = true;
+		glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
+	}
+
+	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
+		isDragging = false;
+	}
+}
+
+void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
+	if (!isDragging) return;
+
+	double dx = xpos - lastMouseX;
+	double dy = ypos - lastMouseY;
+
+	camAzimuth += (float)dx * 0.01f;
+	camElevation -= (float)dy * 0.01f;
+
+	lastMouseX = xpos;
+	lastMouseY = ypos;
+
+	camElevation = glm::clamp(camElevation, -1.5f, 1.5f);
 }
 
 
@@ -372,12 +383,15 @@ int main() {
 void setupVertices(void){
 	
 	//---------XRD POINTS----------------
+	//generate reciprocal points from the cifData
 	xrdPoints = XRDPoints::genXRD(cifData);
-	xrdPointCount = static_cast<int>(xrdPoints.size());
+	xrdPointCount = static_cast<int>(xrdPoints.size()); //how many points gend
 
+	//activate VAO for future buffers etc
 	glGenVertexArrays(1, &xrdVAO);
 	glBindVertexArray(xrdVAO);
 
+	//activate VBO and send in data
 	glGenBuffers(1, &xrdVBO);
 	glBindBuffer(GL_ARRAY_BUFFER, xrdVBO);
 	glBufferData(GL_ARRAY_BUFFER,
@@ -386,7 +400,7 @@ void setupVertices(void){
 		GL_STATIC_DRAW
 	);
 
-	//position
+	//0 matched in vertxex shader, 3 floats
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE,
 		sizeof(XRDPoint), (void*)0);
 	glEnableVertexAttribArray(0);
@@ -439,32 +453,6 @@ GLuint createShaderProgram(const char* vertFile, const char* fragFile) {
 	return vfProgram;
 }
 
-void mouse_button_callback(GLFWwindow* window, int button, int action, int mods) {
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-		isDragging = true;
-		glfwGetCursorPos(window, &lastMouseX, &lastMouseY);
-	}
-
-	if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE) {
-		isDragging = false;
-	}
-}
-
-void cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
-	if (!isDragging) return;
-
-	double dx = xpos - lastMouseX;
-	double dy = ypos - lastMouseY;
-
-	camAzimuth += (float)dx * 0.01f;
-	camElevation -= (float)dy * 0.01f;
-
-	lastMouseX = xpos;
-	lastMouseY = ypos;
-
-	camElevation = glm::clamp(camElevation, -1.5f, 1.5f);
-}
-
 void setupAtoms(const CIFData& cifData) {
 	// quad corners - two triangles
 	float quadVertices[] = {
@@ -478,10 +466,14 @@ void setupAtoms(const CIFData& cifData) {
 
 	// compute atom center positions
 	std::vector<AtomInstance> instances;
+	//loop over every atom
 	for (auto& atom : cifData.atoms) {
 		bool hasZero = false;
 		for (int i = 0; i < 3; i++) {
-			if (atom.fractionalPos[i] < 0.001f) { hasZero = true; break; }
+			if (atom.fractionalPos[i] < 0.001f) { 
+				hasZero = true; 
+				break; 
+			} //sits on face edge or corner
 		}
 
 		if (hasZero) {
@@ -605,4 +597,35 @@ glm::vec2 worldToScreen(const glm::vec3& worldPos, const glm::mat4& mv, const gl
 	float x = (ndc.x + 1.0f) * 0.5f * screenW;
 	float y = (1.0f - ndc.y) * 0.5f * screenH; // y flipped
 	return glm::vec2(x, y);
+}
+
+//popup screen to choose CIF file to be loaded
+void newCIFLoader() {
+	const char* filterPatterns[] = { "*.cif" };
+	const char* result = tinyfd_openFileDialog(
+		"Open CIF File",
+		"",
+		1,
+		filterPatterns,
+		"CIF Files",
+		0
+	);
+	if (result != nullptr) {
+		glDeleteVertexArrays(1, &atomVAO);
+		glDeleteBuffers(1, &atomVBO);
+		glDeleteBuffers(1, &atomInstanceVBO);
+		glDeleteVertexArrays(1, &xrdVAO);
+		glDeleteBuffers(1, &xrdVBO);
+		glDeleteVertexArrays(1, &wireframeVAO);
+		glDeleteBuffers(1, &wireframeVBO);
+
+		camAzimuth = 0.0f;
+		camElevation = 0.3f;
+		camRadius = 25.0f;
+
+		cifData = CIFParser::parse(result);
+		setupAtoms(cifData);
+		setupWireframe(cifData);
+		setupVertices();
+	}
 }

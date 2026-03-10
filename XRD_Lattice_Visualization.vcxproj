@@ -248,7 +248,6 @@
     <None Include=".gitignore" />
     <None Include="atoms.frag" />
     <None Include="atoms.vert" />
-    <None Include="iron.cif" />
     <None Include="points.frag" />
     <None Include="points.vert" />
     <None Include="wireframe.frag" />

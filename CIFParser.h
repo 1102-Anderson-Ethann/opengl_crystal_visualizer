@@ -21,6 +21,7 @@ struct SymOp {
 	glm::vec3 translation;
 };
 
+//holds all parced info
 struct CIFData
 {
 	LatticeParameters lattice;
@@ -33,7 +34,7 @@ class CIFParser
 {
 public:
 	static CIFData parse(const std::string& filename);
-	static SymOp parseSymOp(const std::string& opString);
+	static SymOp parseSymOp(const std::string& opString); //convert sym string to the matrix 
 	static void applySymmetry(CIFData& data);
 	
 private:

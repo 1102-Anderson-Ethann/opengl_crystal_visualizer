@@ -15,18 +15,21 @@ CIFData CIFParser::parse(const std::string& filename) {
 		return data;
 	 }
 
+	//track which col number the data is in
 	int labelCol = -1;
 	int xCol = -1;
 	int yCol = -1;
 	int zCol = -1;
 	int colIndex = 0;
 
+	//read file line by line
 	std::string line;
 	while (std::getline(file, line)) {
 		std::istringstream iss(line);
 		std::string token;
 		iss >> token;
 
+		//new section
 		if (token == "loop_") {
 			inSymOpBlock = false;
 			inAtomSiteBlock = false;
@@ -34,6 +37,7 @@ CIFData CIFParser::parse(const std::string& filename) {
 			colIndex = 0;
 		}
 
+		//grab lattice params from line
 		if (token == "_cell_length_a")  iss >> data.lattice.a;
 		if (token == "_cell_length_b")  iss >> data.lattice.b;
 		if (token == "_cell_length_c")  iss >> data.lattice.c;
@@ -41,10 +45,12 @@ CIFData CIFParser::parse(const std::string& filename) {
 		if (token == "_cell_angle_beta")  iss >> data.lattice.beta;
 		if (token == "_cell_angle_gamma") iss >> data.lattice.gamma;
 
+		//enter symmetry operation block
 		if (token == "_space_group_symop_operation_xyz" ||
 			token == "_symmetry_equiv_pos_as_xyz") {
 			inSymOpBlock = true;
 		}
+		//get chemical formula 
 		if (token == "_chemical_formula_sum") {
 			std::string formula;
 			std::getline(iss, formula);
@@ -54,13 +60,14 @@ CIFData CIFParser::parse(const std::string& filename) {
 			data.formula = formula;
 		}
 
-
+		//found sym op
 		if (inSymOpBlock && !token.empty() &&
 			token[0] != '_' && token != "loop_" &&
 			(token.find(',') != std::string::npos)) {
 			data.symOps.push_back(parseSymOp(token));
 		}
 
+		//enter attom site block
 		if (token == "_atom_site_label") {
 			inAtomSiteBlock = true;
 			labelCol = colIndex;
@@ -73,6 +80,7 @@ CIFData CIFParser::parse(const std::string& filename) {
 		else if (token == "loop_" && inAtomSiteBlock) { inAtomSiteBlock = false; }
 		else if (token.find("_atom_site_") == 0) { colIndex++; }
 
+		//atom data row
 		if (inAtomSiteBlock && xCol != -1 &&
 			!token.empty() && token[0] != '_' && token != "loop_") {
 
@@ -91,8 +99,10 @@ CIFData CIFParser::parse(const std::string& filename) {
 				atom.fractionalPos.x = std::stof(tokens[xCol]);
 				atom.fractionalPos.y = std::stof(tokens[yCol]);
 				atom.fractionalPos.z = std::stof(tokens[zCol]);
+
 				std::cout << atom.label << " " << atom.fractionalPos.x << " " << atom.fractionalPos.y << " " << atom.fractionalPos.z << std::endl;
 				data.atoms.push_back(atom);
+
 			}
 
 
@@ -104,7 +114,10 @@ CIFData CIFParser::parse(const std::string& filename) {
 	return data;
 }
 
+//convert sym op string to rotation and translation
+//new pos = Rpos + t
 SymOp CIFParser::parseSymOp(const std::string& opString) {
+	//create mat and vec for transformations
 	SymOp op;
 	op.rotation = glm::mat3(0.0f);
 	op.translation = glm::vec3(0.0f);
@@ -122,6 +135,7 @@ SymOp CIFParser::parseSymOp(const std::string& opString) {
 		bool readingNumerator = false;
 		bool readingDenominator = false;
 
+		//walk through string ny char
 		for (char c : component) {
 			//Handle signs
 			if (c == '+')
@@ -191,6 +205,7 @@ void CIFParser::applySymmetry(CIFData& data) {
 			glm::vec3 newPos = op.rotation * atom.fractionalPos + op.translation;
 
 			// wrap into unit cell
+			//floor leaves - fractional part
 			newPos.x = newPos.x - std::floor(newPos.x);
 			newPos.y = newPos.y - std::floor(newPos.y);
 			newPos.z = newPos.z - std::floor(newPos.z);
